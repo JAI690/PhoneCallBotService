@@ -119,8 +119,8 @@ Resources:
             Version: '1'
           Configuration:
             Owner: JAI690
-            Repo: PHONECALLBOTSERVICE
-            Branch: main
+            Repo: PhoneCallBotService
+            Branch: master
             OAuthToken:
               Fn::Sub: '{{resolve:secretsmanager:GitHubToken}}'
           OutputArtifacts:
@@ -227,4 +227,7 @@ Resources:
             - s3:GetObject
             - s3:GetObjectVersion
             - s3:PutObject
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
             Resource: '*'
