@@ -166,6 +166,7 @@ Resources:
         PrivilegedMode: true
       Source:
         Type: CODEPIPELINE
+        BuildSpec: infrastructure/buildspec.yml  # Ruta personalizada al archiv
       Artifacts:
         Type: CODEPIPELINE
       ServiceRole: !GetAtt CodeBuildRole.Arn
