@@ -1,0 +1,229 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Resources:
+  # S3 Bucket para cargar archivos CSV
+  ScheduledCallsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: scheduled-calls-bucket
+
+  # Cola SQS para tareas de llamadas
+  CallsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: calls-queue
+
+  # Tabla DynamoDB para registrar detalles de llamadas
+  CallDetailsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: CallDetails
+      AttributeDefinitions:
+        - AttributeName: CallID
+          AttributeType: S
+      KeySchema:
+        - AttributeName: CallID
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+
+  # Lambda: Procesamiento de archivos CSV
+  ProcessCSVFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      PackageType: Image
+      ImageUri: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/process-csv:latest"
+      Events:
+        S3Upload:
+          Type: S3
+          Properties:
+            Bucket: !Ref ScheduledCallsBucket
+            Events: s3:ObjectCreated:*
+
+  # Lambda: Procesamiento de llamadas desde la cola SQS
+  ProcessCallFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      PackageType: Image
+      ImageUri: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/process-call:latest"
+      Events:
+        QueueTrigger:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt CallsQueue.Arn
+
+  # Roles y permisos para las Lambdas
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: LambdaS3SQSPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:ListBucket
+                Resource: !Sub "arn:aws:s3:::${ScheduledCallsBucket}/*"
+              - Effect: Allow
+                Action:
+                  - sqs:SendMessage
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                Resource: !GetAtt CallsQueue.Arn
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:GetItem
+                Resource: !GetAtt CallDetailsTable.Arn
+
+  # CI/CD: Repositorio ECR para contenedores
+  ECRRepositoryCSV:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: process-csv
+
+  ECRRepositoryCall:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: process-call
+
+    CI_CD_Pipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      RoleArn: !GetAtt CodePipelineRole.Arn
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: SourceAction
+              ActionTypeId:
+                Category: Source
+                Owner: ThirdParty
+                Provider: GitHub
+                Version: '1'
+              Configuration:
+                Owner: JAI690
+                Repo: PHONECALLBOTSERVICE
+                Branch: main
+                OAuthToken: !Ref GitHubToken
+              OutputArtifacts:
+                - Name: SourceOutput
+        - Name: Build
+          Actions:
+            - Name: BuildAction
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: '1'
+              Configuration:
+                ProjectName: LambdaDockerBuild
+              InputArtifacts:
+                - Name: SourceOutput
+              OutputArtifacts:
+                - Name: BuildOutput
+        - Name: Deploy
+          Actions:
+            - Name: DeployAction
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: '1'
+              Configuration:
+                ActionMode: CREATE_UPDATE
+                StackName: ScheduledCallsStack
+                Capabilities: CAPABILITY_NAMED_IAM
+                TemplatePath: BuildOutput::template.yaml
+              InputArtifacts:
+                - Name: BuildOutput
+
+  # CodeBuild Project para construir contenedores
+  LambdaDockerBuild:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: LambdaDockerBuild
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:5.0
+        PrivilegedMode: true
+      Source:
+        Type: CODEPIPELINE
+      Artifacts:
+        Type: CODEPIPELINE
+      ServiceRole: !GetAtt CodeBuildRole.Arn
+
+  # IAM Role para CodePipeline
+  CodePipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - codepipeline.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: CodePipelinePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - codebuild:StartBuild
+                  - codebuild:BatchGetBuilds
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:PutObject
+                  - cloudformation:*
+                  - ecr:GetAuthorizationToken
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:BatchGetImage
+                  - ecr:GetDownloadUrlForLayer
+                Resource: "*"
+
+  # IAM Role para CodeBuild
+  CodeBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - codebuild.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: CodeBuildPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:BatchGetImage
+                  - ecr:PutImage
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:PutObject
+                Resource: "*"

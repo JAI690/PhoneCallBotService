@@ -1,0 +1,23 @@
+version: 0.2
+
+phases:
+  pre_build:
+    commands:
+      - echo "Iniciando el build..."
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+  build:
+    commands:
+      - echo "Construyendo las imágenes Docker..."
+      - docker build -t process-csv ./lambdas/process_csv
+      - docker tag process-csv:latest $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/process-csv:latest
+      - docker build -t process-call ./lambdas/process_call
+      - docker tag process-call:latest $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/process-call:latest
+  post_build:
+    commands:
+      - echo "Subiendo las imágenes a ECR..."
+      - docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/process-csv:latest
+      - docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/process-call:latest
+      - echo "Construcción completada."
+artifacts:
+  files:
+    - template.yaml
