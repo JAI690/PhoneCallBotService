@@ -229,4 +229,7 @@ Resources:
                   - s3:GetObject
                   - s3:GetObjectVersion
                   - s3:PutObject
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
                 Resource: "*"
