@@ -101,7 +101,7 @@ Resources:
     Properties:
       RepositoryName: process-call
 
-    CI_CD_Pipeline:
+  CI_CD_Pipeline:
     Type: AWS::CodePipeline::Pipeline
     Properties:
       RoleArn: !GetAtt CodePipelineRole.Arn
