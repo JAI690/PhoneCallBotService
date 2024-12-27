@@ -119,8 +119,8 @@ Resources:
                 Version: '1'
               Configuration:
                 Owner: JAI690
-                Repo: PHONECALLBOTSERVICE
-                Branch: main
+                Repo: PhoneCallBotService
+                Branch: master
                 OAuthToken: !Sub "{{resolve:secretsmanager:GitHubToken}}"
               OutputArtifacts:
                 - Name: SourceOutput
