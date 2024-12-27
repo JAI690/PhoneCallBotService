@@ -1,5 +1,10 @@
 version: 0.2
 
+env:
+  variables:
+    AWS_ACCOUNT_ID: "637423663433" # Cambia por tu cuenta de AWS
+    AWS_DEFAULT_REGION: "us-east-1" # Cambia por tu región
+    
 phases:
   pre_build:
     commands:
