@@ -151,6 +151,7 @@ Resources:
                 StackName: CallBotServiceStack
                 Capabilities: CAPABILITY_NAMED_IAM
                 TemplatePath: BuildOutput::template.yaml
+                RoleArn: !GetAtt CodeDeployRole.Arn
               InputArtifacts:
                 - Name: BuildOutput
 
@@ -170,6 +171,39 @@ Resources:
       Artifacts:
         Type: CODEPIPELINE
       ServiceRole: !GetAtt CodeBuildRole.Arn
+  
+  CodeDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codedeploy.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CodeDeployPermissions
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - codedeploy:*
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:GetBucketLocation
+                  - s3:ListBucket
+                  - secretsmanager:GetSecretValue
+                  - codebuild:StartBuild
+                  - codebuild:BatchGetBuilds
+                  - cloudformation:CreateStack
+                  - cloudformation:UpdateStack
+                  - cloudformation:DeleteStack
+                Resource: "*"
 
   # IAM Role para CodePipeline
   CodePipelineRole:
