@@ -3,10 +3,10 @@ Transform: AWS::Serverless-2016-10-31
 
 Resources:
   # S3 Bucket para cargar archivos CSV
-  ScheduledCallsBucket:
+  CallBotServiceBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: scheduled-calls-bucket
+      BucketName: callbot-service-bucket
 
   # Cola SQS para tareas de llamadas
   CallsQueue:
@@ -32,12 +32,12 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       PackageType: Image
-      ImageUri: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/process-csv:latest"
+      ImageUri: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/phone-call-bot-service/process-csv:latest"
       Events:
         S3Upload:
           Type: S3
           Properties:
-            Bucket: !Ref ScheduledCallsBucket
+            Bucket: !Ref CallBotServiceBucket
             Events: s3:ObjectCreated:*
 
   # Lambda: Procesamiento de llamadas desde la cola SQS
@@ -45,7 +45,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       PackageType: Image
-      ImageUri: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/process-call:latest"
+      ImageUri: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/phone-call-bot-service/process-call:latest"
       Events:
         QueueTrigger:
           Type: SQS
@@ -75,7 +75,7 @@ Resources:
                   - s3:GetObject
                   - s3:PutObject
                   - s3:ListBucket
-                Resource: !Sub "arn:aws:s3:::${ScheduledCallsBucket}/*"
+                Resource: !Sub "arn:aws:s3:::${CallBotServiceBucket}/*"
               - Effect: Allow
                 Action:
                   - sqs:SendMessage
@@ -101,10 +101,13 @@ Resources:
     Properties:
       RepositoryName: process-call
 
-  CI_CD_Pipeline:
+  CICDPipeline:
     Type: AWS::CodePipeline::Pipeline
     Properties:
       RoleArn: !GetAtt CodePipelineRole.Arn
+      ArtifactStore:
+        Type: S3
+        Location: artifacts-phonecallbotservice
       Stages:
         - Name: Source
           Actions:
@@ -118,7 +121,7 @@ Resources:
                 Owner: JAI690
                 Repo: PHONECALLBOTSERVICE
                 Branch: main
-                OAuthToken: !Ref GitHubToken
+                OAuthToken: !Sub "{{resolve:secretsmanager:GitHubToken}}"
               OutputArtifacts:
                 - Name: SourceOutput
         - Name: Build
@@ -145,7 +148,7 @@ Resources:
                 Version: '1'
               Configuration:
                 ActionMode: CREATE_UPDATE
-                StackName: ScheduledCallsStack
+                StackName: CallBotServiceStack
                 Capabilities: CAPABILITY_NAMED_IAM
                 TemplatePath: BuildOutput::template.yaml
               InputArtifacts:
